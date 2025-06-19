@@ -1,0 +1,38 @@
+[package]
+name = "webfetch-mcp-server"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk.git", features = [
+    "server",
+    "transport-io",
+    "transport-streamable-http-server",
+    "transport-worker",
+] }
+tokio = { version = "1", features = ["macros", "io-std", "signal", "rt-multi-thread"] }
+serde = { version = "1.0", features = ["derive"] }
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = [
+    "env-filter",
+    "std",
+    "fmt",
+] }
+axum = { version = "0.8", features = ["macros"] }
+schemars = { version = "0.8", optional = true }
+reqwest = { version = "0.12", features = ["json"] }
+thiserror = "1.0"
+
+[dev-dependencies]
+tokio-stream = { version = "0.1" }
+tokio-util = { version = "0.7", features = ["codec"] }
+
+[[bin]]
+name = "webfetch-api"
+path = "src/web.rs"
+
+[[bin]]
+name = "webfetch"
+path = "src/cli.rs"
