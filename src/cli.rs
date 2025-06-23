@@ -16,9 +16,10 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("Starting MCP CLI server");
 
     // Create an instance of WebFetcher and serve over stdio
-    WebFetcher::new().serve(stdio()).await.inspect_err(|e| {
+    let service = WebFetcher::new().serve(stdio()).await.inspect_err(|e| {
         tracing::error!("serving error: {:?}", e);
     })?;
 
+    service.waiting().await?;
     Ok(())
 }
