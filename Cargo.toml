@@ -5,7 +5,7 @@ edition = "2024"
 publish = false
 
 [dependencies]
-rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk.git", features = [
+rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk.git", rev = "8a577659f01917289064c0a3c753392b44305ef4", features = [
     "server",
     "transport-io",
     "transport-streamable-http-server",
