@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "webfetch": {
+      "type": "stdio",
+      "command": "cargo",
+      "args": ["run", "--bin", "webfetch"]
+    }
+  }
+}
