@@ -4,6 +4,9 @@ use scraper::{Html, Selector};
 use serde::Deserialize;
 use std::sync::Arc;
 use thiserror::Error;
+use tempfile::NamedTempFile;
+use std::io::Write;
+use pdf_extract;
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct FetchRequest {
@@ -105,6 +108,49 @@ impl WebFetcher {
             Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
                 "Failed to fetch the docs.rs page: {}",
                 e
+            ))])),
+        }
+    }
+
+    #[tool(description = "Get PDF file from URL and return extracted text")]
+    pub async fn fetch_pdf_text(&self, #[tool(aggr)] req: FetchRequest) -> Result<CallToolResult, McpError> {
+        let url = req.url.clone();
+        let req_builder = self.build_request(&url);
+        let resp = req_builder.send().await;
+
+        match resp {
+            Ok(response) => {
+                let bytes = response.bytes().await;
+                match bytes {
+                    Ok(bytes) => {
+                        // テンポラリファイルに保存
+                        match NamedTempFile::new() {
+                            Ok(mut tmpfile) => {
+                                if let Err(e) = tmpfile.write_all(&bytes) {
+                                    return Ok(CallToolResult::error(vec![Content::text(format!(
+                                                    "Failed to write PDF to temporary file: {}", e
+                                    ))]));
+                                }
+                                // テキスト抽出
+                                match pdf_extract::extract_text(tmpfile.path()) {
+                                    Ok(text) => Ok(CallToolResult::success(vec![Content::text(text)])),
+                                    Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                                                    "PDF extraction failed: {}", e
+                                    ))])),
+                                }
+                            }
+                            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                                            "Failed to create temporary file: {}", e
+                            ))])),
+                        }
+                    }
+                    Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                                    "Failed to read PDF bytes: {}", e
+                    ))])),
+                }
+            }
+            Err(e) => Ok(CallToolResult::error(vec![Content::text(format!(
+                            "Failed to fetch the PDF file: {}", e
             ))])),
         }
     }
