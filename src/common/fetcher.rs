@@ -92,7 +92,7 @@ impl WebFetcher {
                 let text = response.text().await;
                 match text {
                     Ok(body) => {
-                        let structured = parse_docsrs_page_structured(&body);
+                        let structured = parse_docsrs_page(&body);
                         let json = serde_json::to_string(&structured).unwrap_or_else(|_| "{}".to_string());
                         Ok(CallToolResult::success(vec![Content::text(json)]))
                     },
@@ -165,7 +165,6 @@ fn parse_crate_search_results(html: &str, base_url: &str) -> Vec<CrateSearchResu
         let url = format!("{}{}", base_url, url_path);
         let name_version = a.select(&name_selector).next().map(|e| e.text().collect::<String>()).unwrap_or_default();
         let description = a.select(&desc_selector).next().map(|e| e.text().collect::<String>()).unwrap_or_default();
-        // name-version 形式を分割
         let (name, version) = if let Some(idx) = name_version.rfind('-') {
             (name_version[..idx].to_string(), name_version[idx+1..].to_string())
         } else {
@@ -183,28 +182,22 @@ fn parse_crate_search_results(html: &str, base_url: &str) -> Vec<CrateSearchResu
     results
 }
 
-pub fn parse_docsrs_page_structured(html: &str) -> DocsrsPageStructured {
+pub fn parse_docsrs_page(html: &str) -> DocsrsPageStructured {
     let document = Html::parse_document(html);
     let selector = Selector::parse("#main-content, #main").unwrap();
     let content = document
         .select(&selector)
-        .next()
-        .map(|e| {
-            e.text()
-                .map(|s| s.trim())
-                .filter(|s| !s.is_empty())
-                .collect::<Vec<_>>()
-                .join("\n")
-        })
-        .unwrap_or_default();
+        .map(|e| e.html())
+        .collect::<Vec<_>>()
+        .join("");
     DocsrsPageStructured {
         content,
     }
 }
 
 pub fn is_docsrs_crate_page(url: &str) -> bool {
-    // 例: https://docs.rs/cratename/latest/cratename/ または https://docs.rs/cratename/version/cratename/index.html
-    let re = regex::Regex::new(r"^https://docs\.rs/[^/]+/(latest|[\d.]+)/[^/]+(/index\.html)?/?$").unwrap();
+    // Example: https://docs.rs/cratename/latest/xxx... or https://docs.rs/cratename/version/xxx...
+    let re = regex::Regex::new(r"^https://docs\.rs/[^/]+/(latest|[\d.]+)(/.*)?$").unwrap();
     re.is_match(url)
 }
 
