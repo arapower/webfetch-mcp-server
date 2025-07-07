@@ -1,0 +1,121 @@
+name: Release
+
+permissions:
+  contents: write # For Generate Tag, Create release and Commit
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      ORG_NAME: cancerscan
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set version
+        id: set_version
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          if [[ "$VERSION" == *-* ]]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+            echo "latest=false" >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+            echo "latest=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check version consistency
+        run: |
+          CARGO_VERSION=$(grep '^version *=' Cargo.toml | sed 's/.*= *"\(.*\)"/\1/')
+          TAG="${{ steps.set_version.outputs.tag }}"
+          TAG_VERSION="${{ steps.set_version.outputs.version }}"
+          if [ "$CARGO_VERSION" != "$TAG_VERSION" ]; then
+            echo "Error: Tag version ($TAG_VERSION) does not match Cargo.toml version ($CARGO_VERSION)"
+            exit 1
+          fi
+
+      - name: Cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.set_version.outputs.tag }}
+          name: Version ${{ steps.set_version.outputs.version }}
+          draft: false
+          prerelease: ${{ steps.set_version.outputs.prerelease }}
+          generate_release_notes: true
+          files: |
+            target/release/app_name
+          make_latest: ${{ steps.set_version.outputs.latest }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # For Accessing Homebrew Tap
+      - name: Generate GitHub App token
+        id: generate_app_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+          owner: ${{ env.ORG_NAME }}
+
+      - name: Checkout homebrew-tap
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.ORG_NAME }}/homebrew-tap
+          token: ${{ steps.generate_app_token.outputs.token }}
+          path: homebrew-tap
+
+      - name: Update formula
+        run: |
+          chmod +x .github/workflows/scripts/update_formula.sh
+          .github/workflows/scripts/update_formula.sh "${{ env.ORG_NAME }}" "${{ steps.set_version.outputs.version }}" "${{ steps.set_version.outputs.tag }}"
+        env:
+          ORG_NAME: ${{ env.ORG_NAME }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify Slack
+        uses: slackapi/slack-github-action@v2.1.0
+        with:
+          method: chat.postMessage
+          token: ${{ secrets.SLACK_BOT_TOKEN }}
+          payload: |
+            channel: "C04TADRSJNS"
+            text: "🚀 *app_name ${{ steps.set_version.outputs.tag }}* released"
+            blocks:
+              - type: "header"
+                text:
+                  type: "plain_text"
+                  text: "🚀 New Version Released"
+                  emoji: true
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: "*app_name ${{ steps.set_version.outputs.tag }}*\n\nRelease note: <https://github.com/${{ env.ORG_NAME }}/app_name/releases/tag/${{ steps.set_version.outputs.tag }}|Click here to view the release note>"
+              - type: "section"
+                text:
+                  type: "mrkdwn"
+                  text: "*How to install:*\n```\ngh auth login # Unnecessary if GitHub is accessible\nbrew tap ${{ env.ORG_NAME }}/tap # Required if first run\nbrew install app_name\n```"

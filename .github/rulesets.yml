@@ -1,0 +1,11 @@
+rulesets:
+  - name: Protect main branch
+    target: branch:main
+    rules:
+      - type: pull_request
+        parameters:
+          require_approvals: false
+          dismiss_stale_reviews_on_push: true
+          require_code_owner_review: false
+      
+      - type: non_fast_forward
